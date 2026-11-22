@@ -39,17 +39,18 @@ EXAMPLES = {
 # Shown next to each model in the selector; accuracies from the notebook (60 validation, 30 test photos).
 # The first entry is the recommended model and is selected by default.
 MODEL_INFO = {
+    "dense_head.keras": {
+        "name": "Dense head (recommended)",
+        "about": "Frozen MobileNetV2 + a single dense layer, trained without augmentation. "
+        "Chosen as the final model for its best validation accuracy.",
+        "val": 0.867,
+        "test": 0.933,
+    },
     "augmented_head.keras": {
-        "name": "Augmented head (recommended)",
+        "name": "Augmented head",
         "about": "Frozen MobileNetV2 + dense head, trained with random flips, rotations and zooms.",
         "val": 0.800,
         "test": 0.967,
-    },
-    "dense_head.keras": {
-        "name": "Dense head",
-        "about": "Frozen MobileNetV2 + a single dense layer, trained without augmentation.",
-        "val": 0.867,
-        "test": 0.933,
     },
     "finetuned_model.keras": {
         "name": "Augmented head, extra training",
@@ -315,7 +316,7 @@ tulips, and find out <b>when the model can be trusted</b> and when a person shou
 <div class="stats">
   <div class="stat"><div class="value">390</div><div class="name">photos in total</div></div>
   <div class="stat"><div class="value">100</div><div class="name">training photos per flower</div></div>
-  <div class="stat"><div class="value">96.7%</div><div class="name">test accuracy (29 of 30)</div></div>
+  <div class="stat"><div class="value">93.3%</div><div class="name">test accuracy (28 of 30)</div></div>
   <div class="stat"><div class="value">2.3 M</div><div class="name">frozen pretrained weights reused</div></div>
 </div>
 
@@ -345,42 +346,47 @@ MobileNetV2 features with the 300 training photos, and answers <b>“no match fo
 <h3>📊 Results</h3>
 <table class="table">
   <tr><th>Model</th><th>Training</th><th>Validation</th><th>Test</th></tr>
-  <tr><td>Dense head</td><td>15 epochs, Adam 1e-3</td><td>86.7%</td><td>93.3%</td></tr>
-  <tr class="best"><td>Augmented head ⭐</td><td>+ flips, rotations, zooms, 20 epochs</td><td>80.0%</td>
-    <td>96.7%</td></tr>
+  <tr class="best"><td>Dense head ⭐</td><td>15 epochs, Adam 1e-3</td><td>86.7%</td><td>93.3%</td></tr>
+  <tr><td>Augmented head</td><td>+ flips, rotations, zooms, 20 epochs</td><td>80.0%</td><td>96.7%</td></tr>
   <tr><td>Augmented head, extra training</td><td>+ 15 epochs, Adam 1e-5</td><td>80.0%</td><td>96.7%</td></tr>
 </table>
-<p style="font-size:.85rem;color:#8a8a9a;margin-top:.4rem">60 validation and 30 test photos: one photo is worth
-1.7 and 3.3 percentage points.</p>
+<p style="font-size:.85rem;color:#8a8a9a;margin-top:.4rem">⭐ The final model was chosen by validation accuracy,
+before the test set was opened. 60 validation and 30 test photos: one photo is worth 1.7 and 3.3 percentage
+points.</p>
 
 <h3>💡 Key findings</h3>
 <ul>
   <li><b>Transfer learning works with very little data.</b> With only 300 training photos, a frozen MobileNetV2 and a
-      single dense layer classify 29 of 30 unseen test photos correctly.</li>
-  <li><b>The plain dense head overfits.</b> Its training accuracy reached ~99–100% while validation stayed at ~87% and
-      the validation loss went up. Data augmentation narrowed that gap.</li>
-  <li><b>Small evaluation sets are noisy.</b> The models differ by 1–2 photos, so validation and test accuracy do not
-      agree on the order; the augmented model was kept for its smaller overfitting and best test score.</li>
-  <li><b>The one test mistake is a wide shot</b> of a sunflower field, taken for tulips (65%). At 160×160 pixels the
-      single flower heads become too small: close-ups work best.</li>
-  <li><b>A 3-class model always answers.</b> It called a photo of the Eiffel Tower a rose with 96% confidence, so the
-      app adds a similarity check. Look-alike flowers such as peonies or daisies can still pass it.</li>
+      single dense layer classify 28 of 30 unseen test photos correctly.</li>
+  <li><b>Choose by validation, report the test.</b> The augmented models score one photo higher on the test set
+      (96.7%), but choosing them for that would make the test score optimistic. With 30 test photos, one photo is
+      random variation.</li>
+  <li><b>The dense head overfits</b>: about 99–100% training accuracy against 87% validation accuracy. Data
+      augmentation did not raise the validation accuracy here (80.0%).</li>
+  <li><b>Both test mistakes are sunflowers</b> (below): one in a wide garden shot, one in a mixed display with other
+      flowers. Close-ups of one kind of flower work best.</li>
+  <li><b>Mistakes come with lower confidence.</b> On the validation and test photos, answers below 80% confidence
+      include 6 of the 10 mistakes but only 7 of the 80 correct answers, so they are worth a staff check.</li>
+  <li><b>A 3-class model always answers.</b> It called a photo of a forest by the sea a sunflower with 95% confidence,
+      so the app adds a similarity check. Look-alike flowers such as peonies or daisies can still pass it.</li>
 </ul>
+<h3>🔎 The two misclassified test photos</h3>
 </div>
 """,
         unsafe_allow_html=True,
     )
 
-    col_img, col_text = st.columns([1, 1.4], gap="medium")
-    with col_img:
-        st.image(str(TEST_DIR / "sunflower" / "2729206569_9dd2b5a3ed.jpg"), width="stretch")
-    with col_text:
-        st.markdown(
-            '<div class="card"><b>The only misclassified test photo</b><br>True: 🌻 sunflower · Predicted: 🌷 tulip '
-            "(65%)<br><br>In a wide field shot the flower heads are tiny, and the green leaves with yellow-red dots "
-            "look more like a tulip field.</div>",
-            unsafe_allow_html=True,
-        )
+    MISTAKES = [
+        ("2807106374_f422b5f00c.jpg", "🌹 rose (72%)", "A wide shot of a garden: the sunflowers are small and far away."),
+        ("2733109082_1351f6738a_n.jpg", "🌷 tulip (79%)", "Sunflowers in vases next to other flowers, some dark red."),
+    ]
+    for col, (name, predicted, why) in zip(st.columns(2, gap="medium"), MISTAKES):
+        with col:
+            st.image(str(TEST_DIR / "sunflower" / name), width="stretch")
+            st.markdown(
+                f'<div class="card">True: 🌻 sunflower · Predicted: {predicted}<br>{why}</div>',
+                unsafe_allow_html=True,
+            )
 
     st.markdown(
         f"""

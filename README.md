@@ -1,6 +1,6 @@
 # 🌸 Flower Classifier: Transfer Learning with MobileNetV2
 
-Classifying photos of **roses, sunflowers and tulips** with only **100 training photos per flower**, by reusing a MobileNetV2 network pretrained on ImageNet. The best model gets **96.7% accuracy (29 of 30)** on a held-out test set. It runs in a Streamlit web app that also says **"no match found"** for photos that are not one of the three flowers.
+Classifying photos of **roses, sunflowers and tulips** with only **100 training photos per flower**, by reusing a MobileNetV2 network pretrained on ImageNet. The final model, chosen by validation accuracy, gets **93.3% accuracy (28 of 30)** on a held-out test set. It runs in a Streamlit web app that also says **"no match found"** for photos that are not one of the three flowers.
 
 [![Live demo](https://img.shields.io/badge/Live%20demo-nicolai--flowers.streamlit.app-c8559c?logo=streamlit&logoColor=white)](https://nicolai-flowers.streamlit.app/)
 ![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)
@@ -53,19 +53,21 @@ The full analysis is in [`01_flower_classification_project.ipynb`](01_flower_cla
 
 | Model | Training | Validation accuracy | Test accuracy |
 | :-- | :-- | --: | --: |
-| Dense head | 15 epochs, Adam 1e-3 | 86.7% | 93.3% |
-| **Augmented head** ⭐ | + flips, rotations, zooms, 20 epochs | 80.0% | **96.7%** |
+| **Dense head** ⭐ | 15 epochs, Adam 1e-3 | **86.7%** | **93.3%** |
+| Augmented head | + flips, rotations, zooms, 20 epochs | 80.0% | 96.7% |
 | Augmented head, extra training | + 15 epochs, Adam 1e-5 | 80.0% | 96.7% |
 
-With 60 validation and 30 test photos, one photo is worth 1.7 and 3.3 percentage points.
+⭐ **The final model was chosen by validation accuracy**, before the test set was opened. Its test accuracy, **93.3%**, is the honest estimate for new photos. The augmented models score one photo higher on the test set, but choosing them for that would use the test set for model selection and make the reported number optimistic. With 60 validation and 30 test photos, one photo is worth 1.7 and 3.3 percentage points.
 
 ### Key Findings
 
-- **Transfer learning works with very little data.** With only 300 training photos, a frozen MobileNetV2 and one dense layer classify 29 of 30 unseen test photos correctly.
-- **The plain dense head overfits.** Its training accuracy reached 99-100% while validation accuracy stayed at about 87% and the validation loss went up. Data augmentation narrowed this gap.
-- **Small evaluation sets are noisy.** The models differ by only 1-2 photos, so validation and test accuracy do not agree on their order. The augmented model was kept because it overfits less and has the best test score.
-- **The only test mistake is a wide shot** of a sunflower field, predicted as tulips (65%). At 160×160 pixels the single flower heads become too small, so **close-ups work best**.
-- **A 3-class model always answers.** It called a photo of the Eiffel Tower a rose with 96% confidence. That is why the app adds an out-of-scope check (below).
+- **Transfer learning works with very little data.** With only 300 training photos, a frozen MobileNetV2 and one dense layer classify 28 of 30 unseen test photos correctly.
+- **Choose by validation, report the test.** A one-photo difference on 30 test photos is random variation, not a better model.
+- **The dense head overfits.** It reaches about 99-100% training accuracy against 87% validation accuracy. Data augmentation did not raise the validation accuracy here (80.0%).
+- **Both test mistakes are sunflowers:** a wide shot of a garden where the sunflowers are small and far away (predicted rose, 72%), and sunflowers in vases next to other flowers, some of them dark red (predicted tulip, 79%). **Close-ups of one kind of flower work best.**
+- **Mistakes come with lower confidence.** On the validation and test photos, answers below 80% confidence include 6 of the 10 mistakes but only 7 of the 80 correct answers (9%). For the garden centre, these answers are worth a staff check.
+- **A 3-class model always answers.** It called a photo of a forest by the sea a sunflower with 95% confidence. That is why the app adds an out-of-scope check (below).
+- **About model 3:** the fine-tuning step unfroze the `augmentation` block instead of MobileNetV2, so the base stayed frozen. Model 3 is the augmented model trained for 15 more epochs at a lower learning rate.
 
 ## The App: "No Match Found"
 
@@ -74,13 +76,13 @@ A softmax over three classes always picks one of them, even for a photo of a car
 1. **The photo does not look like the training photos.** The app compares the photo's MobileNetV2 features with the features of all 300 training photos. If the mean cosine similarity to the 5 most similar ones is below **0.44**, the photo is out of scope.
 2. **The model is not confident.** Its top probability is below **60%**.
 
-The thresholds were calibrated on the validation and test photos and on about 40 extra photos of other objects and other flowers:
+The thresholds were calibrated on the validation and test photos and on about 40 extra photos of other objects and other flowers. Results with the Dense head:
 
 | Photos | Answered "no match found" |
 | :-- | --: |
 | Objects, animals, landscapes, food, buildings | 100% |
 | Other flowers (lily, orchid, lotus, lavender, dandelion…) | about 40% |
-| Real roses, sunflowers and tulips (validation + test) | 4% |
+| Real roses, sunflowers and tulips (validation + test) | 7% |
 
 **Limitation:** flowers that look a lot like the three classes, such as peonies (like roses) or daisies (like small sunflowers), can still be classified as one of them.
 
