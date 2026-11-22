@@ -1,158 +1,127 @@
-# Flower Classification Project
+# 🌸 Flower Classifier: Transfer Learning with MobileNetV2
 
-A one-day project with 390 photos of roses, sunflowers and tulips. You classify the photos with only 100 training photos per flower: use a pretrained network with a dense head, improve it with data augmentation, and find out which photos the best model gets wrong. At the end, you try your model on photos of your own in a small Streamlit app and deploy it on Streamlit Community Cloud.
+Classifying photos of **roses, sunflowers and tulips** with only **100 training photos per flower**, by reusing a MobileNetV2 network pretrained on ImageNet. The best model gets **96.7% accuracy (29 of 30)** on a held-out test set. It runs in a Streamlit web app that also says **"no match found"** for photos that are not one of the three flowers.
 
-## Learning Objectives
+[![Live demo](https://img.shields.io/badge/Live%20demo-nicolai--flowers.streamlit.app-c8559c?logo=streamlit&logoColor=white)](https://nicolai-flowers.streamlit.app/)
+![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)
+![TensorFlow](https://img.shields.io/badge/TensorFlow%20%2F%20Keras-3-FF6F00?logo=tensorflow&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-app-FF4B4B?logo=streamlit&logoColor=white)
 
-By the end of this project, you should be able to:
+**▶ Try it: [nicolai-flowers.streamlit.app](https://nicolai-flowers.streamlit.app/)**
 
-- Load training, validation and test images from folders, and keep the test set locked until the final evaluation.
-- Train a frozen pretrained base with a dense head, improve the model with data augmentation, and choose the best model by its validation accuracy.
-- Compare every model in one table of validation and test accuracies, and use a confusion matrix and the misclassified test photos to identify where the chosen model makes its mistakes.
+| Prediction | Not a flower | About the project |
+| :--: | :--: | :--: |
+| ![A sunflower photo classified as sunflower](assets/screenshots/prediction.png) | ![A photo of a dog answered with no match found](assets/screenshots/no_match.png) | ![The About the project tab](assets/screenshots/about.png) |
 
-## Learning Path
+## The Problem
 
-| File | Description |
-|---|---|
-| [**01 - Flower Classification Project**](01_flower_classification_project.ipynb) | The project: the business problem, the data description, the task in seven steps, the last one in the Streamlit app. |
+A garden centre lets customers upload a photo of a flower from their garden and sends back a care guide. Today a member of staff looks at every photo and picks the guide by hand. The goal is to **choose the guide automatically** for the three most requested flowers, and to find out **when the model can be trusted** and when a person should check its answer.
 
-### Additional Folders and Files
+## Data
 
-| File / Folder | Description |
-|---|---|
-| [**app.py**](app.py) | A Streamlit app that loads a saved model from `models/` and classifies an uploaded photo (step 7). |
-| [**Assets**](assets/) | The diagram of the project's steps shown in the notebook, with its Mermaid source in `assets/diagrams/`. |
-| [**Data**](data/) | The photos, one folder per flower: 100 per class in `train/`, 20 per class in `validation/` and 10 per class in `test/`, with the photographers in `LICENSE.txt`. |
-| [**pyproject.toml**](pyproject.toml) | Project configuration and dependencies. |
-| [**uv.lock**](uv.lock) | Dependency lock file. |
+390 colour photos from the [TensorFlow flower photos](https://www.tensorflow.org/datasets/catalog/tf_flowers) collection (Flickr, CC BY 2.0), stored in [`data/`](data/) with one folder per flower:
 
-## Setup
+| Split | Rose | Sunflower | Tulip | Used for |
+| :-- | --: | --: | --: | :-- |
+| `train` | 100 | 100 | 100 | training |
+| `validation` | 20 | 20 | 20 | choosing the model |
+| `test` | 10 | 10 | 10 | final evaluation only, kept locked until the end |
 
-> [!NOTE]
-> Throughout these steps, text in angle brackets like `<repo-name>` is a **placeholder**. Replace it, including the `< >` brackets, with your own value. For example, `cd <repo-name>` becomes `cd my-flower-project`.
+The photos are very diverse: single close-ups, whole fields, bouquets in vases, people and buildings in the background. They range from 159 to 640 pixels wide.
 
-### 1. Create the Repository from the Template
+## Approach
 
-Click **Use this template** on GitHub.
-
-When creating the repository:
-
-- Set yourself as the **Owner**
-- Choose a repository name
-- Disable **Include all branches**
-- Click **Create repository**
-
-> [!IMPORTANT]
-> If you are working in pairs or groups, only **one person** should complete this step.
-
----
-
-### 2. Add Collaborators (Pairs/Groups Only)
-
-If working with teammates:
-
-1. Open the repository on GitHub
-2. Go to **Settings → Collaborators**
-3. Add your teammates as collaborators
-4. Share the repository link with your team
-
-Teammates should accept the invitation before continuing.
-
----
-
-### 3. Clone the Repository
-
-Copy the SSH URL from the **Code** button on GitHub, then run:
-
-```bash
-git clone <copied-ssh-url>
+```
+photo (160×160×3, pixels 0-255)
+  → [RandomFlip, RandomRotation(0.1), RandomZoom(0.1)]   only during training, augmented models
+  → Rescaling to [-1, 1]                                 = mobilenet_v2.preprocess_input
+  → MobileNetV2, ImageNet weights, frozen, average pooling → 1,280 features
+  → Dropout(0.2)
+  → Dense(3, softmax)                                     rose / sunflower / tulip
 ```
 
-The copied SSH URL will look like `git@github.com:<your-username>/<repo-name>.git`.
+1. **Load** the photos with `keras.utils.image_dataset_from_directory` at 160×160 pixels.
+2. **Explore** the training set: sunflowers stand out by colour and shape; roses and tulips come in many colours and differ mostly by shape.
+3. **Transfer learning:** freeze the pretrained MobileNetV2 (2.3 M weights) and train only the small head (3,843 weights).
+4. **Data augmentation** against overfitting.
+5. **Evaluate** all saved models on the locked test set, with a confusion matrix and a look at every misclassified photo.
+6. **Deploy** the models in a Streamlit app on Streamlit Community Cloud.
 
----
+The full analysis is in [`01_flower_classification_project.ipynb`](01_flower_classification_project.ipynb).
 
-### 4. Move into the Project Folder and Install Dependencies
+## Results
 
-This installs all dependencies, including TensorFlow, Keras and Streamlit, and creates a virtual environment in `.venv/`. TensorFlow is a large package, so the first install takes a few minutes.
+| Model | Training | Validation accuracy | Test accuracy |
+| :-- | :-- | --: | --: |
+| Dense head | 15 epochs, Adam 1e-3 | 86.7% | 93.3% |
+| **Augmented head** ⭐ | + flips, rotations, zooms, 20 epochs | 80.0% | **96.7%** |
+| Augmented head, extra training | + 15 epochs, Adam 1e-5 | 80.0% | 96.7% |
+
+With 60 validation and 30 test photos, one photo is worth 1.7 and 3.3 percentage points.
+
+### Key Findings
+
+- **Transfer learning works with very little data.** With only 300 training photos, a frozen MobileNetV2 and one dense layer classify 29 of 30 unseen test photos correctly.
+- **The plain dense head overfits.** Its training accuracy reached 99-100% while validation accuracy stayed at about 87% and the validation loss went up. Data augmentation narrowed this gap.
+- **Small evaluation sets are noisy.** The models differ by only 1-2 photos, so validation and test accuracy do not agree on their order. The augmented model was kept because it overfits less and has the best test score.
+- **The only test mistake is a wide shot** of a sunflower field, predicted as tulips (65%). At 160×160 pixels the single flower heads become too small, so **close-ups work best**.
+- **A 3-class model always answers.** It called a photo of the Eiffel Tower a rose with 96% confidence. That is why the app adds an out-of-scope check (below).
+
+## The App: "No Match Found"
+
+A softmax over three classes always picks one of them, even for a photo of a car. The app therefore answers **"no match found"** when either:
+
+1. **The photo does not look like the training photos.** The app compares the photo's MobileNetV2 features with the features of all 300 training photos. If the mean cosine similarity to the 5 most similar ones is below **0.44**, the photo is out of scope.
+2. **The model is not confident.** Its top probability is below **60%**.
+
+The thresholds were calibrated on the validation and test photos and on about 40 extra photos of other objects and other flowers:
+
+| Photos | Answered "no match found" |
+| :-- | --: |
+| Objects, animals, landscapes, food, buildings | 100% |
+| Other flowers (lily, orchid, lotus, lavender, dandelion…) | about 40% |
+| Real roses, sunflowers and tulips (validation + test) | 4% |
+
+**Limitation:** flowers that look a lot like the three classes, such as peonies (like roses) or daisies (like small sunflowers), can still be classified as one of them.
+
+## Run It Locally
+
+You need [uv](https://docs.astral.sh/uv/).
 
 ```bash
-cd <repo-name>
-uv sync
+git clone https://github.com/NicolaiTurcan/amle-project-flowers.git
+cd amle-project-flowers
+uv sync                        # installs TensorFlow, Keras, Streamlit and the rest into .venv/
+uv run streamlit run app.py    # opens the app in your browser
 ```
 
----
+To reproduce the training, open the notebook in VS Code or Jupyter with the `.venv` environment as the kernel. The pretrained MobileNetV2 weights (9 MB) are downloaded on first use.
 
-### 5. Open the Notebooks
+## Project Structure
 
-> [!NOTE]
-> Make sure you open VS Code from the project root so it automatically detects the environment created by `uv sync`.
+| Path | Description |
+| :-- | :-- |
+| [`01_flower_classification_project.ipynb`](01_flower_classification_project.ipynb) | Data exploration, training, evaluation and error analysis |
+| [`app.py`](app.py) | Streamlit app: classifier with the "no match" check and an "About the project" tab |
+| [`models/`](models/) | The three trained models (`.keras`, about 10 MB each) |
+| [`data/`](data/) | The 390 photos, with their photographers in `data/LICENSE.txt` |
+| [`assets/`](assets/) | Project workflow diagram, app screenshots and the example photo |
+| [`.streamlit/config.toml`](.streamlit/config.toml) | App theme |
+| [`pyproject.toml`](pyproject.toml), [`uv.lock`](uv.lock) | Dependencies |
 
-Launch VS Code in the project root folder:
+## Tech Stack
 
-```bash
-code .
-```
+Python 3.13 · TensorFlow / Keras 3 · MobileNetV2 · scikit-learn · pandas · NumPy · Matplotlib · Streamlit · Streamlit Community Cloud · uv
 
-Then open a notebook and select the Python environment created by `uv sync` as the kernel.
+## Next Steps
 
----
+- Fine-tune the top layers of MobileNetV2 with a low learning rate. The pretrained base stayed frozen in this project.
+- Collect more photos, especially wide shots, and use cross-validation for more reliable accuracy estimates.
+- Add more flowers and an explicit *other* class to handle out-of-scope photos better.
 
-### 6. Run the App
+## Credits
 
-After you have saved a model to `models/` in step 5 of the notebook, start the app from the project root folder:
-
-```bash
-uv run streamlit run app.py
-```
-
-It opens in your browser. Choose a model and upload a photo of a rose, a sunflower or a tulip.
-
-> [!NOTE]
-> The app passes the raw photo, with pixel values from 0 to 255, to the model. It works with models that include their preprocessing, such as `preprocess_input`, as a step inside the model.
-
----
-
-### 7. Deploy the App to Streamlit Community Cloud
-
-Once the app works on your machine, deploy it on [Streamlit Community Cloud](https://streamlit.io/cloud) so that anyone can try your model in the browser, without installing anything.
-
-1. **Commit your best model.** The `models/` folder is ignored by Git, so add the model file explicitly, then commit and push it:
-
-   ```bash
-   git add -f models/<model-name>.keras
-   git commit -m "Add the trained flower model"
-   git push
-   ```
-
-2. **Sign in.** Go to [share.streamlit.io](https://share.streamlit.io) and sign in with your GitHub account.
-3. **Create the app.** Click **Create app**, then **Yup, I have an app**, and fill in:
-   - **Repository**: `<your-username>/<repo-name>`
-   - **Branch**: `main`
-   - **Main file path**: `app.py`
-   - **App URL** (optional): a subdomain of your choice, for example `<your-name>-flowers.streamlit.app`
-4. **Choose the Python version.** Click **Advanced settings**, select Python **3.13** to match `.python-version`, and click **Save**.
-5. **Deploy.** Click **Deploy**. Community Cloud installs the dependencies from `uv.lock`; TensorFlow is large, so the first build takes a few minutes.
-6. **Share the link.** Open the app, upload a flower photo and share the URL with your team.
-
-> [!IMPORTANT]
-> To deploy, you need **admin** rights on the repository, so in pairs or groups the person who created the repository deploys the app.
-
-> [!NOTE]
-> An app deployed from a private repository is private by default. Community Cloud allows only **one private app** per account, and you need to grant it access to your private repositories in **Settings → Linked accounts**. To share the app, invite viewers by email under **Share**, or make it public.
-
-## Data and Credits
-
-The photos are part of the repository, in `data/` (30 MB). The pretrained weights are downloaded the first time you load a network from `keras.applications` and stored in `~/.keras/models`: 9 MB for MobileNetV2 without its top, loaded from disk on later runs.
-
-- **Flower photos**: 390 photos from the [TensorFlow flower photos](https://www.tensorflow.org/datasets/catalog/tf_flowers) collection, taken from Flickr. Every photo is licensed under [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/); its photographer is listed in [`data/LICENSE.txt`](data/LICENSE.txt).
-
-## References & Further Reading
-
-- [**Keras: Transfer learning and fine-tuning**](https://keras.io/guides/transfer_learning/): Freezing a base, training a head and fine-tuning, including the `BatchNormalization` layers.
-- [**Keras: Image classification from scratch**](https://keras.io/examples/vision/image_classification_from_scratch/): Loading images from folders and data augmentation.
-- [**Keras Applications**](https://keras.io/api/applications/): The pretrained networks available in Keras, with their size, accuracy and `preprocess_input`.
-- [**TensorFlow: Transfer learning with a pretrained ConvNet**](https://www.tensorflow.org/tutorials/images/transfer_learning): MobileNetV2 as a frozen base and fine-tuning, step by step.
-- [**Streamlit documentation**](https://docs.streamlit.io/): Building and running small web apps in Python, including `st.file_uploader` and `st.cache_resource`.
-- [**Streamlit Community Cloud: Deploy your app**](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/deploy): Deploying an app from a GitHub repository, choosing the Python version and sharing the app.
-- [**Sandler et al. (2018), MobileNetV2: Inverted Residuals and Linear Bottlenecks**](https://arxiv.org/abs/1801.04381): The paper behind MobileNetV2.
+- Built as a team project during an ML engineering course.
+- **Flower photos:** [TensorFlow flower photos](https://www.tensorflow.org/datasets/catalog/tf_flowers), licensed under [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/). Every photographer is listed in [`data/LICENSE.txt`](data/LICENSE.txt).
+- **Dog photo** in the app's examples: André Spieker on [Unsplash](https://unsplash.com/photos/8wTPqxlnKM4) (Unsplash License).
+- **MobileNetV2:** Sandler et al. (2018), [*MobileNetV2: Inverted Residuals and Linear Bottlenecks*](https://arxiv.org/abs/1801.04381).
