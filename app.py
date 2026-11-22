@@ -2,9 +2,7 @@
 
 Run it from the repository folder: uv run streamlit run app.py
 
-Every model in models/ takes the raw photo (pixel values 0 to 255), does its own preprocessing and outputs one
-probability per flower. Because a 3-class model always picks one of its three flowers, the app also checks whether
-the photo looks like the training photos at all, and answers "no match found" when it does not.
+The model code (classification and the "no match found" check) is in flower_model.py.
 """
 
 from pathlib import Path
@@ -14,13 +12,22 @@ import numpy as np
 import streamlit as st
 import tensorflow as tf
 
-ROOT = Path(__file__).parent
-MODELS_DIR = ROOT / "models"
-TRAIN_DIR = ROOT / "data" / "train"
+from flower_model import (
+    CLASSES,
+    MIN_CONFIDENCE,
+    MIN_SIMILARITY,
+    MODELS_DIR,
+    REFERENCE_FILE,
+    ROOT,
+    compute_reference_features,
+    features_and_probabilities,
+    prepare_photo,
+    similarity_to,
+)
+
 TEST_DIR = ROOT / "data" / "test"
 REPO_URL = "https://github.com/NicolaiTurcan/amle-project-flowers"
 
-CLASSES = ["rose", "sunflower", "tulip"]  # the folder names, in alphabetical order, as in the training data
 FLOWERS = {
     "rose": {"emoji": "🌹", "color": "#d94a6a"},
     "sunflower": {"emoji": "🌻", "color": "#e0a516"},
@@ -60,17 +67,8 @@ MODEL_INFO = {
     },
 }
 
-# "No match" rules, calibrated on the validation and test photos and on photos of other objects and other flowers:
-# - SIMILARITY: mean cosine similarity of the photo's MobileNetV2 features to its 5 closest training photos.
-#   Real roses, sunflowers and tulips score about 0.46-0.75; cars, landscapes, buildings and food score below 0.44.
-# - CONFIDENCE: the model's top probability. Below 0.60 the model is not sure which of the three flowers it sees.
-MIN_SIMILARITY = 0.44
-MIN_CONFIDENCE = 0.60
-NEIGHBOURS = 5
-
-
 # ---------------------------------------------------------------------------------------------------------------------
-# Model and features
+# Model
 # ---------------------------------------------------------------------------------------------------------------------
 
 
@@ -79,47 +77,23 @@ def load_model(path):
     return keras.models.load_model(path)
 
 
-def feature_layers(model):
-    """The layers from the input up to the pretrained base (the nested model whose output is a feature vector)."""
-    layers = []
-    for layer in model.layers:
-        layers.append(layer)
-        if isinstance(layer, keras.Model) and len(layer.output.shape) == 2:
-            return layers
-    raise ValueError("The model has no pretrained base with a pooled output.")
-
-
-def extract_features(model, pixels):
-    """L2-normalised features of the pretrained base, for a batch of raw photos."""
-    x = tf.convert_to_tensor(pixels)
-    for layer in feature_layers(model):
-        x = layer(x, training=False)  # augmentation layers do nothing when training=False
-    x = x.numpy()
-    return x / np.linalg.norm(x, axis=1, keepdims=True)
-
-
-def prepare_photo(photo_bytes, size):
-    """Decode and resize a photo with TensorFlow, as image_dataset_from_directory did for the training photos."""
-    image = tf.io.decode_image(photo_bytes, channels=3, expand_animations=False)
-    return tf.image.resize(image, size).numpy()  # bilinear, the default of image_dataset_from_directory
-
-
 @st.cache_resource(show_spinner=False)
 def reference_features(model_path):
-    """Features of every training photo, to measure how similar a new photo is to what the model has seen."""
-    model = load_model(model_path)
-    size = model.input_shape[1:3]
-    photos = np.stack([prepare_photo(tf.io.read_file(str(p)), size) for p in sorted(TRAIN_DIR.glob("*/*.jpg"))])
-    return np.concatenate([extract_features(model, photos[i : i + 32]) for i in range(0, len(photos), 32)])
+    """Features of the training photos: precomputed in models/reference_features.npz, or computed once if missing."""
+    name = Path(model_path).name
+    if REFERENCE_FILE.exists():
+        with np.load(REFERENCE_FILE) as saved:
+            if name in saved.files:
+                return saved[name]
+    return compute_reference_features(load_model(model_path))
 
 
 def classify(model_path, photo_bytes):
+    """Class probabilities and similarity to the training photos, from one pass through the model."""
     model = load_model(model_path)
     pixels = prepare_photo(photo_bytes, model.input_shape[1:3])[np.newaxis]  # a batch of one photo
-    probabilities = model.predict(pixels, verbose=0)[0]
-    similarities = extract_features(model, pixels)[0] @ reference_features(model_path).T
-    similarity = float(np.sort(similarities)[-NEIGHBOURS:].mean())
-    return probabilities, similarity
+    features, probabilities = features_and_probabilities(model, pixels)
+    return probabilities[0], similarity_to(reference_features(model_path), features[0])
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -247,7 +221,7 @@ with tab_app:
     if photo_bytes is not None:
         st.markdown('<div class="step"><span>3</span>Result</div>', unsafe_allow_html=True)
         try:
-            with st.spinner("Looking at the photo… (the first run also prepares the model, about 10 seconds)"):
+            with st.spinner("Looking at the photo…"):
                 probabilities, similarity = classify(str(model_path), photo_bytes)
         except tf.errors.InvalidArgumentError:
             st.error("This file could not be read as an image. Please upload a JPG or PNG photo.")

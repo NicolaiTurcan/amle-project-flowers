@@ -97,7 +97,13 @@ uv sync                        # installs TensorFlow, Keras, Streamlit and the r
 uv run streamlit run app.py    # opens the app in your browser
 ```
 
-To reproduce the training, open the notebook in VS Code or Jupyter with the `.venv` environment as the kernel. The pretrained MobileNetV2 weights (9 MB) are downloaded on first use.
+To reproduce the training, open the notebook in VS Code or Jupyter with the `.venv` environment as the kernel. The pretrained MobileNetV2 weights (9 MB) are downloaded on first use. After saving new models, rebuild the features that the "no match" check compares against:
+
+```bash
+uv run python flower_model.py
+```
+
+The features are precomputed, one photo at a time, because running the training photos through the network in batches takes over 1 GB of memory, more than a free Streamlit Community Cloud app has. With them, the app needs about 500 MB.
 
 ## Project Structure
 
@@ -105,7 +111,8 @@ To reproduce the training, open the notebook in VS Code or Jupyter with the `.ve
 | :-- | :-- |
 | [`01_flower_classification_project.ipynb`](01_flower_classification_project.ipynb) | Data exploration, training, evaluation and error analysis |
 | [`app.py`](app.py) | Streamlit app: classifier with the "no match" check and an "About the project" tab |
-| [`models/`](models/) | The three trained models (`.keras`, about 10 MB each) |
+| [`flower_model.py`](flower_model.py) | Model code used by the app: one pass gives the class probabilities and the similarity to the training photos |
+| [`models/`](models/) | The three trained models (`.keras`, about 10 MB each) and the precomputed features of the training photos (`reference_features.npz`) |
 | [`data/`](data/) | The 390 photos, with their photographers in `data/LICENSE.txt` |
 | [`assets/`](assets/) | Project workflow diagram, app screenshots and the example photo |
 | [`.streamlit/config.toml`](.streamlit/config.toml) | App theme |
